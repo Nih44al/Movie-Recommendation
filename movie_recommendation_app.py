@@ -17,6 +17,9 @@ st.markdown(
         input, select, textarea, button, [role="button"] {
             cursor: pointer !important;
         }
+        
+        /* Ensure long descriptions are fully visible */
+        .stMarkdown { white-space: pre-wrap !important; }
     </style>
     """,
     unsafe_allow_html=True
@@ -48,49 +51,66 @@ movies['Genre'] = movies['Genre'].str.strip().str.title()
 # Remove duplicates while keeping only necessary columns for filtering
 movies = movies.drop_duplicates(subset=['Title', 'Language', 'Genre', 'Year', 'Rating'])
 
-# Get unique values for Language and Genre dropdowns after standardization
+# Get unique values for Language and Genre dropdowns
 language_options = sorted(movies['Language'].dropna().unique())
 genre_options = sorted(movies['Genre'].dropna().unique())
+year_options = sorted(movies['Year'].dropna().unique())
 
-# Sidebar filters with collapsible section
-with st.sidebar.expander("🔍 *Adjust Filters (Click to Expand)*", expanded=True):
-    language_filter = st.selectbox('Select Language', language_options)
-    genre_filter = st.selectbox('Select Genre', genre_options)
-    year_filter = st.selectbox('Select Year', sorted(movies['Year'].dropna().unique()))
-    rating_filter = st.slider('Select Maximum Rating', 0.0, 10.0, 10.0)
+# **Persistent Selections Using Session State**
+if "selected_year" not in st.session_state:
+    st.session_state["selected_year"] = year_options[0]
+if "selected_genre" not in st.session_state:
+    st.session_state["selected_genre"] = genre_options[0]
+if "selected_language" not in st.session_state:
+    st.session_state["selected_language"] = language_options[0]
 
-# Filter dataset based on selections
+# 🎬 **Step 1: Dropdowns for Selection (Always Visible)**
+st.title("🎥 Movie Recommendation System")
+st.subheader("Select your preferences to find a movie!")
+
+col1, col2, col3 = st.columns(3)
+with col1:
+    st.session_state["selected_year"] = st.selectbox("📅 Select Year", year_options, index=year_options.index(st.session_state["selected_year"]))
+with col2:
+    st.session_state["selected_genre"] = st.selectbox("🎭 Select Genre", genre_options, index=genre_options.index(st.session_state["selected_genre"]))
+with col3:
+    st.session_state["selected_language"] = st.selectbox("🗣 Select Language", language_options, index=language_options.index(st.session_state["selected_language"]))
+
+# **Find matching movies based on the selection**
 filtered_movies = movies[
-    (movies['Language'] == language_filter) &
-    (movies['Genre'] == genre_filter) &
-    (movies['Year'] == year_filter) &
-    (movies['Rating'] <= rating_filter)
+    (movies['Year'] == st.session_state["selected_year"]) &
+    (movies['Genre'] == st.session_state["selected_genre"]) &
+    (movies['Language'] == st.session_state["selected_language"])
 ]
 
+# If no movies match, show a warning
 if filtered_movies.empty:
-    st.warning("⚠ No movies found based on the selected filters. Try adjusting your filters.")
+    st.warning("⚠️ No movies found for the selected criteria. Try different options.")
     st.stop()
 
-# Function to resolve the full poster path
+# **Step 2: Select the First Movie from Filtered Results**
+selected_movie = filtered_movies.iloc[0]
+
+# Function to resolve poster path
 def get_poster_path(poster_path):
     """Returns the full path of the poster if available, else returns a default placeholder."""
-    default_image = os.path.join("posters", "default.jpg")  # Default poster
+    default_image = os.path.join("posters", "default.jpg")
 
     if pd.notna(poster_path):
-        full_path = os.path.join(os.getcwd(), poster_path)  # Use the dataset's path as is
+        full_path = os.path.join(os.getcwd(), poster_path)
         if os.path.exists(full_path):
             return full_path
 
-    return default_image if os.path.exists(default_image) else None  # Use default if missing
+    return default_image if os.path.exists(default_image) else None
 
 # Function to display recommendations
 def show_recommendations(selected_movie):
     st.subheader("🎬 Selected Movie:")
-    st.write(f"{selected_movie['Title']} ({selected_movie['Year']}, {selected_movie['Rating']}/10)")
-    st.write(selected_movie['Description'])
+    st.markdown(f"### **{selected_movie['Title']} ({selected_movie['Year']}, {selected_movie['Rating']}/10)**")
+    st.markdown(f"**Description:** {selected_movie['Description']}")  # Ensure full description is displayed
 
     # Load and display the selected movie's poster
-    poster_path = get_poster_path(selected_movie['Image_Path'])  # Use Image_Path column
+    poster_path = get_poster_path(selected_movie['Image_Path'])
     if poster_path:
         st.image(Image.open(poster_path), caption=selected_movie['Title'], width=200)
     else:
@@ -102,20 +122,19 @@ def show_recommendations(selected_movie):
         (movies['Title'] != selected_movie['Title']) &
         (movies['Language'] == selected_movie['Language']) &
         (movies['Genre'] == selected_movie['Genre'])
-    ].sample(min(3, len(movies)), random_state=42)  # Select up to 3 recommendations
-    
+    ].sample(min(3, len(movies)), random_state=42)
+
     if recommendations.empty:
         st.write("No recommendations available.")
     else:
         for _, movie in recommendations.iterrows():
-            st.write(f"{movie['Title']} ({movie['Year']}, {movie['Rating']}/10)")  # Show movie title + year + rating
-            st.write(movie['Description'][:200] + "...")  # Show first 200 chars only
+            st.markdown(f"### **{movie['Title']} ({movie['Year']}, {movie['Rating']}/10)**")  # Show title, year, rating
+            st.markdown(f"**Description:** {movie['Description']}")  # Ensure full description is displayed
             rec_poster_path = get_poster_path(movie['Image_Path'])
             if rec_poster_path:
                 st.image(Image.open(rec_poster_path), caption=movie['Title'], width=150)
             else:
                 st.warning("🚨 Poster not available!")
 
-# Automatically select the first movie from filtered results if available
-selected_movie = filtered_movies.iloc[0]
+# Display the selected movie and recommendations
 show_recommendations(selected_movie)
