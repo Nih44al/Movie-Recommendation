@@ -17,6 +17,9 @@ st.markdown(
         input, select, textarea, button, [role="button"] {
             cursor: pointer !important;
         }
+        
+        /* Ensure long descriptions are fully visible */
+        .stMarkdown { white-space: pre-wrap !important; }
     </style>
     """,
     unsafe_allow_html=True
@@ -94,9 +97,9 @@ def get_poster_path(poster_path):
     default_image = os.path.join("posters", "default.jpg")
 
     if pd.notna(poster_path):
-        corrected_path = os.path.join("posters", os.path.basename(poster_path))  # Ensure correct path
-        if os.path.exists(corrected_path):
-            return corrected_path
+        full_path = os.path.join(os.getcwd(), poster_path)
+        if os.path.exists(full_path):
+            return full_path
 
     return default_image if os.path.exists(default_image) else None
 
