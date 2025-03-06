@@ -64,22 +64,25 @@ if "selected_genre" not in st.session_state:
 if "selected_language" not in st.session_state:
     st.session_state["selected_language"] = language_options[0]
 
-# 🎬 **Step 1: Dropdowns for Selection (Always Visible)**
+# ✅ **Use temporary variables instead of directly modifying session state**
 st.title("🎥 Movie Recommendation System")
 st.subheader("Select your preferences to find a movie!")
 
 col1, col2, col3 = st.columns(3)
 with col1:
-    selected_year = st.selectbox("📅 Select Year", year_options, index=year_options.index(st.session_state["selected_year"]))
+    temp_year = st.selectbox("📅 Select Year", year_options, index=year_options.index(st.session_state["selected_year"]))
 with col2:
-    selected_genre = st.selectbox("🎭 Select Genre", genre_options, index=genre_options.index(st.session_state["selected_genre"]))
+    temp_genre = st.selectbox("🎭 Select Genre", genre_options, index=genre_options.index(st.session_state["selected_genre"]))
 with col3:
-    selected_language = st.selectbox("🗣 Select Language", language_options, index=language_options.index(st.session_state["selected_language"]))
+    temp_language = st.selectbox("🗣 Select Language", language_options, index=language_options.index(st.session_state["selected_language"]))
 
-# ✅ **Update session state only after selection is made**
-st.session_state["selected_year"] = selected_year
-st.session_state["selected_genre"] = selected_genre
-st.session_state["selected_language"] = selected_language
+# ✅ **Update session state only after selection is confirmed**
+if temp_year != st.session_state["selected_year"]:
+    st.session_state["selected_year"] = temp_year
+if temp_genre != st.session_state["selected_genre"]:
+    st.session_state["selected_genre"] = temp_genre
+if temp_language != st.session_state["selected_language"]:
+    st.session_state["selected_language"] = temp_language
 
 # **Find matching movies based on the selection**
 filtered_movies = movies[
