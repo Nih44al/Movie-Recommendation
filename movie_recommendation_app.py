@@ -18,96 +18,97 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# ✅ **Load dataset (No Caching to Improve UI Response Time)**
-def load_movies():
-    try:
-        movies = pd.read_excel('movies_dataset.xlsx')
-        required_columns = {'Title', 'Description', 'Language', 'Genre', 'Year', 'Rating', 'Image_Path'}
-        if not required_columns.issubset(movies.columns):
-            st.error("Dataset is missing required columns!")
-            st.stop()
-        return movies
-    except Exception as e:
-        st.error(f"Error loading dataset: {e}")
+# Load the dataset with error handling
+try:
+    movies = pd.read_excel('movies_dataset.xlsx')
+    required_columns = {'Title', 'Description', 'Language', 'Genre', 'Year', 'Rating', 'Image_Path'}
+    if not required_columns.issubset(movies.columns):
+        st.error("Dataset is missing required columns!")
         st.stop()
+except Exception as e:
+    st.error(f"Error loading dataset: {e}")
+    st.stop()
 
-movies = load_movies()
-
-# ✅ **Preprocess dataset once**
+# Fix incorrect poster paths
 movies['Image_Path'] = movies['Image_Path'].str.replace('poster/', 'posters/', regex=False)
+movies['Image_Path'] = movies['Image_Path'].str.replace(r'_\.jpg$', '.jpg', regex=True)
+
+# Filter dataset to only include movies between 2014 and 2024
 movies = movies[(movies['Year'] >= 2014) & (movies['Year'] <= 2024)]
+
+# Standardize Language and Genre
 movies['Language'] = movies['Language'].str.strip().str.title()
 movies['Genre'] = movies['Genre'].str.strip().str.title()
+
+# Remove duplicates
 movies = movies.drop_duplicates(subset=['Title', 'Language', 'Genre', 'Year', 'Rating'])
 
-# ✅ **Get unique values (No Caching to Keep UI Fast)**
+# Get unique values for dropdowns
 language_options = sorted(movies['Language'].dropna().unique())
 genre_options = sorted(movies['Genre'].dropna().unique())
 year_options = sorted(movies['Year'].dropna().unique())
 
-# ✅ **Session State Defaults (Avoid Double Click Issue)**
-if "selected_filters" not in st.session_state:
-    st.session_state["selected_filters"] = {
-        "year": year_options[0],
-        "genre": genre_options[0],
-        "language": language_options[0]
-    }
+# *Persistent Selections Using Session State*
+if "selected_year" not in st.session_state:
+    st.session_state["selected_year"] = year_options[0]
+if "selected_genre" not in st.session_state:
+    st.session_state["selected_genre"] = genre_options[0]
+if "selected_language" not in st.session_state:
+    st.session_state["selected_language"] = language_options[0]
 
-# ✅ **Faster UI Updates (Batch Update Instead of Multiple Calls)**
+# ✅ *Use temporary variables for dropdown selection*
 st.title("🎥 Movie Recommendation System")
 st.subheader("Select your preferences to find a movie!")
 
 col1, col2, col3 = st.columns(3)
 with col1:
-    selected_year = st.selectbox("📅 Select Year", year_options, index=year_options.index(st.session_state["selected_filters"]["year"]))
+    temp_year = st.selectbox("📅 Select Year", year_options, index=year_options.index(st.session_state["selected_year"]))
 with col2:
-    selected_genre = st.selectbox("🎭 Select Genre", genre_options, index=genre_options.index(st.session_state["selected_filters"]["genre"]))
+    temp_genre = st.selectbox("🎭 Select Genre", genre_options, index=genre_options.index(st.session_state["selected_genre"]))
 with col3:
-    selected_language = st.selectbox("🗣 Select Language", language_options, index=language_options.index(st.session_state["selected_filters"]["language"]))
+    temp_language = st.selectbox("🗣 Select Language", language_options, index=language_options.index(st.session_state["selected_language"]))
 
-# ✅ **Batch Update Session State (Fixes Double Click Issue)**
-if (
-    selected_year != st.session_state["selected_filters"]["year"] or
-    selected_genre != st.session_state["selected_filters"]["genre"] or
-    selected_language != st.session_state["selected_filters"]["language"]
-):
-    st.session_state["selected_filters"].update({
-        "year": selected_year,
-        "genre": selected_genre,
-        "language": selected_language
-    })
-    st.rerun()  # ✅ Forces a UI refresh instantly on selection
+# ✅ **Update session state & force rerun immediately (using st.rerun())**
+if temp_year != st.session_state["selected_year"]:
+    st.session_state["selected_year"] = temp_year
+    st.rerun()  # NEW FIX ✅
+if temp_genre != st.session_state["selected_genre"]:
+    st.session_state["selected_genre"] = temp_genre
+    st.rerun()  # NEW FIX ✅
+if temp_language != st.session_state["selected_language"]:
+    st.session_state["selected_language"] = temp_language
+    st.rerun()  # NEW FIX ✅
 
-# ✅ **Use direct Pandas filtering (Faster than `.query()`)**
-filtered_movies = movies.loc[
-    (movies['Year'] == st.session_state["selected_filters"]["year"]) &
-    (movies['Genre'] == st.session_state["selected_filters"]["genre"]) &
-    (movies['Language'] == st.session_state["selected_filters"]["language"])
+# *Find matching movies*
+filtered_movies = movies[
+    (movies['Year'] == st.session_state["selected_year"]) &
+    (movies['Genre'] == st.session_state["selected_genre"]) &
+    (movies['Language'] == st.session_state["selected_language"])
 ]
 
 # If no movies match, show a warning
 if filtered_movies.empty:
-    st.warning("⚠️ No movies found for the selected criteria. Try different options.")
+    st.warning("⚠ No movies found for the selected criteria. Try different options.")
     st.stop()
 
-# ✅ **Select the First Movie from Filtered Results**
+# *Select the First Movie from Filtered Results*
 selected_movie = filtered_movies.iloc[0]
 
-# ✅ **Fast function to get poster path (No Caching to Avoid Overhead)**
+# Function to resolve poster path
 def get_poster_path(poster_path):
     """Returns the full path of the poster if available, else returns a default placeholder."""
     default_image = os.path.join("posters", "default.jpg")
     if pd.notna(poster_path):
-        full_path = os.path.join("posters", os.path.basename(poster_path))
+        full_path = os.path.join(os.getcwd(), poster_path)
         if os.path.exists(full_path):
             return full_path
     return default_image if os.path.exists(default_image) else None
 
-# ✅ **Optimized Recommendation System**
+# Function to display recommendations
 def show_recommendations(selected_movie):
     st.subheader("🎬 Selected Movie:")
-    st.markdown(f"### **{selected_movie['Title']} ({selected_movie['Year']}, {selected_movie['Rating']}/10)**")
-    st.markdown(f"**Description:** {selected_movie['Description']}")
+    st.markdown(f"### *{selected_movie['Title']} ({selected_movie['Year']}, {selected_movie['Rating']}/10)*")
+    st.markdown(f"*Description:* {selected_movie['Description']}")
 
     # Load and display the selected movie's poster
     poster_path = get_poster_path(selected_movie['Image_Path'])
@@ -118,7 +119,7 @@ def show_recommendations(selected_movie):
 
     # Display recommended movies
     st.subheader("✨ Recommended Movies:")
-    recommendations = movies.loc[
+    recommendations = movies[
         (movies['Title'] != selected_movie['Title']) &
         (movies['Language'] == selected_movie['Language']) &
         (movies['Genre'] == selected_movie['Genre'])
@@ -128,8 +129,8 @@ def show_recommendations(selected_movie):
         st.write("No recommendations available.")
     else:
         for _, movie in recommendations.iterrows():
-            st.markdown(f"### **{movie['Title']} ({movie['Year']}, {movie['Rating']}/10)**")
-            st.markdown(f"**Description:** {movie['Description']}")
+            st.markdown(f"### *{movie['Title']} ({movie['Year']}, {movie['Rating']}/10)*")
+            st.markdown(f"*Description:* {movie['Description']}")
             rec_poster_path = get_poster_path(movie['Image_Path'])
             if rec_poster_path:
                 st.image(Image.open(rec_poster_path), caption=movie['Title'], width=150)
