@@ -76,13 +76,16 @@ with col2:
 with col3:
     temp_language = st.selectbox("🗣 Select Language", language_options, index=language_options.index(st.session_state["selected_language"]))
 
-# ✅ **Update session state only after selection is confirmed**
+# ✅ **Update session state & force rerun immediately**
 if temp_year != st.session_state["selected_year"]:
     st.session_state["selected_year"] = temp_year
+    st.experimental_rerun()  # Instant refresh to apply changes
 if temp_genre != st.session_state["selected_genre"]:
     st.session_state["selected_genre"] = temp_genre
+    st.experimental_rerun()  
 if temp_language != st.session_state["selected_language"]:
     st.session_state["selected_language"] = temp_language
+    st.experimental_rerun()  
 
 # **Find matching movies based on the selection**
 filtered_movies = movies[
