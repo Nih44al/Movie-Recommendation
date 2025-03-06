@@ -18,124 +18,95 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# Load the dataset with error handling
-try:
-    movies = pd.read_excel('movies_dataset.xlsx')
-    required_columns = {'Title', 'Description', 'Language', 'Genre', 'Year', 'Rating', 'Image_Path'}
-    if not required_columns.issubset(movies.columns):
-        st.error("Dataset is missing required columns!")
-        st.stop()
-except Exception as e:
-    st.error(f"Error loading dataset: {e}")
-    st.stop()
+# ✅ **1️⃣ Cache the dataset to prevent reloading**
+@st.cache_data
+def load_data():
+    try:
+        df = pd.read_excel('movies_dataset.xlsx')
+        df['Image_Path'] = df['Image_Path'].str.replace('poster/', 'posters/', regex=False)
+        df['Image_Path'] = df['Image_Path'].str.replace(r'_\.jpg$', '.jpg', regex=True)
+        df['Language'] = df['Language'].str.strip().str.title()
+        df['Genre'] = df['Genre'].str.strip().str.title()
+        return df[(df['Year'] >= 2014) & (df['Year'] <= 2024)].drop_duplicates(subset=['Title', 'Language', 'Genre', 'Year', 'Rating'])
+    except Exception as e:
+        st.error(f"Error loading dataset: {e}")
+        return pd.DataFrame()  # Return empty DataFrame on error
 
-# Fix incorrect poster paths
-movies['Image_Path'] = movies['Image_Path'].str.replace('poster/', 'posters/', regex=False)
-movies['Image_Path'] = movies['Image_Path'].str.replace(r'_\.jpg$', '.jpg', regex=True)
+movies = load_data()
 
-# Filter dataset to only include movies between 2014 and 2024
-movies = movies[(movies['Year'] >= 2014) & (movies['Year'] <= 2024)]
-
-# Standardize Language and Genre
-movies['Language'] = movies['Language'].str.strip().str.title()
-movies['Genre'] = movies['Genre'].str.strip().str.title()
-
-# Remove duplicates
-movies = movies.drop_duplicates(subset=['Title', 'Language', 'Genre', 'Year', 'Rating'])
-
-# Get unique values for dropdowns
-language_options = sorted(movies['Language'].dropna().unique())
-genre_options = sorted(movies['Genre'].dropna().unique())
-year_options = sorted(movies['Year'].dropna().unique())
-
-# **Persistent Selections Using Session State**
+# ✅ **2️⃣ Store selections in session state for faster filtering**
 if "selected_year" not in st.session_state:
-    st.session_state["selected_year"] = year_options[0]
+    st.session_state["selected_year"] = movies["Year"].min()
 if "selected_genre" not in st.session_state:
-    st.session_state["selected_genre"] = genre_options[0]
+    st.session_state["selected_genre"] = movies["Genre"].iloc[0]
 if "selected_language" not in st.session_state:
-    st.session_state["selected_language"] = language_options[0]
+    st.session_state["selected_language"] = movies["Language"].iloc[0]
 
-# ✅ **Use temporary variables for dropdown selection**
+# ✅ **3️⃣ Use temporary variables & update session state only if changed**
 st.title("🎥 Movie Recommendation System")
 st.subheader("Select your preferences to find a movie!")
 
 col1, col2, col3 = st.columns(3)
 with col1:
-    temp_year = st.selectbox("📅 Select Year", year_options, index=year_options.index(st.session_state["selected_year"]))
+    temp_year = st.selectbox("📅 Select Year", sorted(movies["Year"].unique()), index=sorted(movies["Year"].unique()).index(st.session_state["selected_year"]))
 with col2:
-    temp_genre = st.selectbox("🎭 Select Genre", genre_options, index=genre_options.index(st.session_state["selected_genre"]))
+    temp_genre = st.selectbox("🎭 Select Genre", sorted(movies["Genre"].unique()), index=sorted(movies["Genre"].unique()).index(st.session_state["selected_genre"]))
 with col3:
-    temp_language = st.selectbox("🗣 Select Language", language_options, index=language_options.index(st.session_state["selected_language"]))
+    temp_language = st.selectbox("🗣 Select Language", sorted(movies["Language"].unique()), index=sorted(movies["Language"].unique()).index(st.session_state["selected_language"]))
 
-# ✅ **Update session state & force rerun immediately (using `st.rerun()`)**
-if temp_year != st.session_state["selected_year"]:
+# ✅ **4️⃣ Only trigger rerun if a filter changes (prevents unnecessary UI reloads)**
+if (temp_year != st.session_state["selected_year"]) or (temp_genre != st.session_state["selected_genre"]) or (temp_language != st.session_state["selected_language"]):
     st.session_state["selected_year"] = temp_year
-    st.rerun()  # NEW FIX ✅
-if temp_genre != st.session_state["selected_genre"]:
     st.session_state["selected_genre"] = temp_genre
-    st.rerun()  # NEW FIX ✅
-if temp_language != st.session_state["selected_language"]:
     st.session_state["selected_language"] = temp_language
-    st.rerun()  # NEW FIX ✅
+    st.rerun()  # ✅ This now only runs when a real change happens
 
-# **Find matching movies**
-filtered_movies = movies[
-    (movies['Year'] == st.session_state["selected_year"]) &
-    (movies['Genre'] == st.session_state["selected_genre"]) &
-    (movies['Language'] == st.session_state["selected_language"])
-]
+# ✅ **5️⃣ Use `query()` for optimized filtering**
+filtered_movies = movies.query("Year == @st.session_state.selected_year & Genre == @st.session_state.selected_genre & Language == @st.session_state.selected_language")
 
 # If no movies match, show a warning
 if filtered_movies.empty:
     st.warning("⚠️ No movies found for the selected criteria. Try different options.")
     st.stop()
 
-# **Select the First Movie from Filtered Results**
+# ✅ **6️⃣ Cache Image Loading (Faster Poster Display)**
+@st.cache_resource
+def load_image(image_path):
+    """Loads an image efficiently."""
+    default_image = "posters/default.jpg"
+    if pd.notna(image_path):
+        corrected_path = os.path.join("posters", os.path.basename(image_path))
+        if os.path.exists(corrected_path):
+            return Image.open(corrected_path)
+    return Image.open(default_image) if os.path.exists(default_image) else None
+
+# **Step 2: Select the First Movie from Filtered Results**
 selected_movie = filtered_movies.iloc[0]
 
-# Function to resolve poster path
-def get_poster_path(poster_path):
-    """Returns the full path of the poster if available, else returns a default placeholder."""
-    default_image = os.path.join("posters", "default.jpg")
-    if pd.notna(poster_path):
-        full_path = os.path.join(os.getcwd(), poster_path)
-        if os.path.exists(full_path):
-            return full_path
-    return default_image if os.path.exists(default_image) else None
+# Display selected movie
+st.subheader("🎬 Selected Movie:")
+st.markdown(f"### **{selected_movie['Title']} ({selected_movie['Year']}, {selected_movie['Rating']}/10)**")
+st.markdown(f"**Description:** {selected_movie['Description']}")
 
-# Function to display recommendations
-def show_recommendations(selected_movie):
-    st.subheader("🎬 Selected Movie:")
-    st.markdown(f"### **{selected_movie['Title']} ({selected_movie['Year']}, {selected_movie['Rating']}/10)**")
-    st.markdown(f"**Description:** {selected_movie['Description']}")
+# Load and display the selected movie's poster
+poster_image = load_image(selected_movie['Image_Path'])
+if poster_image:
+    st.image(poster_image, caption=selected_movie['Title'], width=200)
+else:
+    st.warning("🚨 Poster not available!")
 
-    # Load and display the selected movie's poster
-    poster_path = get_poster_path(selected_movie['Image_Path'])
-    if poster_path:
-        st.image(Image.open(poster_path), caption=selected_movie['Title'], width=200)
-    else:
-        st.warning("🚨 Poster not available!")
+# ✅ **7️⃣ Use `.sample(n, random_state)` efficiently for recommendations**
+st.subheader("✨ Recommended Movies:")
+recommendations = movies.query("Language == @selected_movie.Language & Genre == @selected_movie.Genre & Title != @selected_movie.Title").sample(min(3, len(movies)), random_state=42)
 
-    # Display recommended movies
-    st.subheader("✨ Recommended Movies:")
-    recommendations = movies[
-        (movies['Title'] != selected_movie['Title']) &
-        (movies['Language'] == selected_movie['Language']) &
-        (movies['Genre'] == selected_movie['Genre'])
-    ].sample(min(3, len(movies)), random_state=42)
-
-    if recommendations.empty:
-        st.write("No recommendations available.")
-    else:
-        for _, movie in recommendations.iterrows():
-            st.markdown(f"### **{movie['Title']} ({movie['Year']}, {movie['Rating']}/10)**")
-            st.markdown(f"**Description:** {movie['Description']}")
-            rec_poster_path = get_poster_path(movie['Image_Path'])
-            if rec_poster_path:
-                st.image(Image.open(rec_poster_path), caption=movie['Title'], width=150)
-            else:
-                st.warning("🚨 Poster not available!")
-
-# Display the selected movie and recommendations
-show_recommendations(selected_movie)
+if recommendations.empty:
+    st.write("No recommendations available.")
+else:
+    for _, movie in recommendations.iterrows():
+        st.markdown(f"### **{movie['Title']} ({movie['Year']}, {movie['Rating']}/10)**")
+        st.markdown(f"**Description:** {movie['Description']}")
+        rec_poster = load_image(movie['Image_Path'])
+        if rec_poster:
+            st.image(rec_poster, caption=movie['Title'], width=150)
+        else:
+            st.warning("🚨 Poster not available!")
