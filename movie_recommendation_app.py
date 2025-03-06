@@ -70,11 +70,16 @@ st.subheader("Select your preferences to find a movie!")
 
 col1, col2, col3 = st.columns(3)
 with col1:
-    st.session_state["selected_year"] = st.selectbox("📅 Select Year", year_options, index=year_options.index(st.session_state["selected_year"]))
+    selected_year = st.selectbox("📅 Select Year", year_options, index=year_options.index(st.session_state["selected_year"]))
 with col2:
-    st.session_state["selected_genre"] = st.selectbox("🎭 Select Genre", genre_options, index=genre_options.index(st.session_state["selected_genre"]))
+    selected_genre = st.selectbox("🎭 Select Genre", genre_options, index=genre_options.index(st.session_state["selected_genre"]))
 with col3:
-    st.session_state["selected_language"] = st.selectbox("🗣 Select Language", language_options, index=language_options.index(st.session_state["selected_language"]))
+    selected_language = st.selectbox("🗣 Select Language", language_options, index=language_options.index(st.session_state["selected_language"]))
+
+# ✅ **Update session state only after selection is made**
+st.session_state["selected_year"] = selected_year
+st.session_state["selected_genre"] = selected_genre
+st.session_state["selected_language"] = selected_language
 
 # **Find matching movies based on the selection**
 filtered_movies = movies[
