@@ -18,8 +18,7 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# ✅ **Load the dataset once (No Caching)**
-@st.cache_data
+# ✅ **Load dataset (No Caching to Improve UI Response Time)**
 def load_movies():
     try:
         movies = pd.read_excel('movies_dataset.xlsx')
@@ -41,44 +40,49 @@ movies['Language'] = movies['Language'].str.strip().str.title()
 movies['Genre'] = movies['Genre'].str.strip().str.title()
 movies = movies.drop_duplicates(subset=['Title', 'Language', 'Genre', 'Year', 'Rating'])
 
-# ✅ **Get unique values (NO Caching to improve response time)**
+# ✅ **Get unique values (No Caching to Keep UI Fast)**
 language_options = sorted(movies['Language'].dropna().unique())
 genre_options = sorted(movies['Genre'].dropna().unique())
 year_options = sorted(movies['Year'].dropna().unique())
 
-# ✅ **Session State Defaults**
-if "selected_year" not in st.session_state:
-    st.session_state["selected_year"] = year_options[0]
-if "selected_genre" not in st.session_state:
-    st.session_state["selected_genre"] = genre_options[0]
-if "selected_language" not in st.session_state:
-    st.session_state["selected_language"] = language_options[0]
+# ✅ **Session State Defaults (Avoid Double Click Issue)**
+if "selected_filters" not in st.session_state:
+    st.session_state["selected_filters"] = {
+        "year": year_options[0],
+        "genre": genre_options[0],
+        "language": language_options[0]
+    }
 
-# ✅ **Faster UI Updates (No unnecessary `st.rerun()`)**
+# ✅ **Faster UI Updates (Batch Update Instead of Multiple Calls)**
 st.title("🎥 Movie Recommendation System")
 st.subheader("Select your preferences to find a movie!")
 
 col1, col2, col3 = st.columns(3)
 with col1:
-    selected_year = st.selectbox("📅 Select Year", year_options, index=year_options.index(st.session_state["selected_year"]))
+    selected_year = st.selectbox("📅 Select Year", year_options, index=year_options.index(st.session_state["selected_filters"]["year"]))
 with col2:
-    selected_genre = st.selectbox("🎭 Select Genre", genre_options, index=genre_options.index(st.session_state["selected_genre"]))
+    selected_genre = st.selectbox("🎭 Select Genre", genre_options, index=genre_options.index(st.session_state["selected_filters"]["genre"]))
 with col3:
-    selected_language = st.selectbox("🗣 Select Language", language_options, index=language_options.index(st.session_state["selected_language"]))
+    selected_language = st.selectbox("🗣 Select Language", language_options, index=language_options.index(st.session_state["selected_filters"]["language"]))
 
-# ✅ **Only update session state if values change**
-if (selected_year != st.session_state["selected_year"] or
-    selected_genre != st.session_state["selected_genre"] or
-    selected_language != st.session_state["selected_language"]):
-    st.session_state["selected_year"] = selected_year
-    st.session_state["selected_genre"] = selected_genre
-    st.session_state["selected_language"] = selected_language
+# ✅ **Batch Update Session State (Fixes Double Click Issue)**
+if (
+    selected_year != st.session_state["selected_filters"]["year"] or
+    selected_genre != st.session_state["selected_filters"]["genre"] or
+    selected_language != st.session_state["selected_filters"]["language"]
+):
+    st.session_state["selected_filters"].update({
+        "year": selected_year,
+        "genre": selected_genre,
+        "language": selected_language
+    })
+    st.rerun()  # ✅ Forces a UI refresh instantly on selection
 
-# ✅ **Use direct Pandas filtering instead of `.query()`**
+# ✅ **Use direct Pandas filtering (Faster than `.query()`)**
 filtered_movies = movies.loc[
-    (movies['Year'] == st.session_state["selected_year"]) &
-    (movies['Genre'] == st.session_state["selected_genre"]) &
-    (movies['Language'] == st.session_state["selected_language"])
+    (movies['Year'] == st.session_state["selected_filters"]["year"]) &
+    (movies['Genre'] == st.session_state["selected_filters"]["genre"]) &
+    (movies['Language'] == st.session_state["selected_filters"]["language"])
 ]
 
 # If no movies match, show a warning
